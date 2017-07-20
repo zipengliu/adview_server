@@ -145,13 +145,8 @@ def parse_tree(tree, entities):
     return data
 
 
-@app.route('/consensus', methods=['POST'])
-def get_consensus():
-    input_group_id = int(request.form['inputGroupId'])
-    tids = str(request.form['trees']).split(',')
-    print 'Creating consensus tree for ', tids, 'in dataset', input_group_id
-
     # Retrieve the tree data (newick string) from the DB
+def get_newick_from_DB(input_group_id, tids):
     tree_cursor = connection.tree.find({'inputGroupId': input_group_id}, projection={'tid': True, 'newickString': True})
     trees = {tid: True for tid in tids}
     remain = len(tids)
@@ -163,6 +158,16 @@ def get_consensus():
             if remain == 0:
                 break
     assert remain == 0, 'Failed to find newick string for some trees'
+    return tree_str
+
+
+@app.route('/consensus', methods=['POST'])
+def get_consensus():
+    input_group_id = int(request.form['inputGroupId'])
+    tids = str(request.form['trees']).split(',')
+    print 'Creating consensus tree for ', tids, 'in dataset', input_group_id
+
+    tree_str = get_newick_from_DB(input_group_id, tids)
 
     # Write the strings to a file
     tree_filename = datetime.now().strftime('%m%d%H%M%S%f') + '.tre'
@@ -189,6 +194,16 @@ def get_consensus():
     tree = Tree.get(data=newick_string, schema='newick')
     tree.resolve_polytomies()
     return jsonify(parse_tree(tree, entities))
+
+
+@app.route('/tree_newick', methods=['POST'])
+def get_tree_newick():
+    input_group_id = int(request.form['inputGroupId'])
+    tids = str(request.form['tids']).split(',')
+    print 'Getting newick strings for ', tids, 'in dataset', input_group_id
+
+    tree_str = get_newick_from_DB(input_group_id, tids)
+    return '\n'.join(tree_str)
 
 
 # @app.route('/dataset/<int:input_group_id>/tree/<ref_tid>/root/<root_bid>')
