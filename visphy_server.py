@@ -193,7 +193,9 @@ def get_consensus():
     newick_string = read_tree_from_consensus_report(consensus_path)
     tree = Tree.get(data=newick_string, schema='newick')
     tree.resolve_polytomies()
-    return jsonify(parse_tree(tree, entities))
+    parsed_tree = parse_tree(tree, entities)
+    parsed_tree['newickString'] = newick_string
+    return jsonify(parsed_tree)
 
 
 @app.route('/tree_newick', methods=['POST'])
