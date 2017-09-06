@@ -67,13 +67,13 @@ tree_cnt = 0
 tree_col.delete_many({'inputGroupId': input_group_id})
 default_reference_tree = None
 
-def insert_tree(tree_file, tree_name, tree_type=None):
+def insert_tree(tree_file, tree_name, tree_type=None, data=None):
     global tree_cnt
     tid = 't' + str(tree_cnt)
     new_tree = {
             'tid': tid,
             'inputGroupId': input_group_id,
-            'newickString': tree_file.readline().strip(), 
+            'newickString': data or tree_file.readline().strip(),
             'name': tree_name, 
             'type': tree_type,
             'rfDistance': {},
@@ -105,7 +105,13 @@ elif config['mode'] == 0:
                     tree_id = insert_tree(open(os.path.join(dirpath, filename)), tree_name.group(), config['treeType'])
                     if default_reference_tree is None:
                             default_reference_tree = tree_id
-              
+elif config['mode'] == 2:
+    default_reference_tree = insert_tree(open(config['referenceTreePath']), config['referenceTreePath'])
+    i = 1
+    for line in open(config['treeCollectionPath']):
+        insert_tree(None, 'tree_' + str(i), data=line.strip())
+        i += 1
+
 
 
 # In[13]:
@@ -132,7 +138,14 @@ if 'entityNameRegex' in config:
 print 'Parsing tree data, inserting entities and branches...'
 for tid, tval in trees.iteritems():
     tree_format = config.get('eteNewickFormatReferenceTree', 2) if tid == default_reference_tree else config.get('eteNewickFormat', 2)
-    root = ete3.Tree(tval['newickString'], format=tree_format)
+    root = None
+    print 'Parsing tree', tid
+    try:
+        root = ete3.Tree(tval['newickString'], format=tree_format)
+    except Exception as e:
+        print 'fall back to format 0'
+        root = ete3.Tree(tval['newickString'], format=0)
+    print tid
     # Make sure the tree is strictly bifurcated
     root.resolve_polytomy(recursive=True)
     tval['ete_tree'] = root
