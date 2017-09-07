@@ -1,7 +1,7 @@
 import config
 import os
 from celery import Celery
-from dendropy import Tree, TreeList
+from dendropy import Tree, TreeList, Node
 from dendropy.calculate import treecompare
 from database import Connection
 import time
@@ -67,10 +67,13 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
 
     dataset = connection.input_group.find_one({'inputGroupId': input_group_id})
     dataset_dir = os.path.join(config.DATA_FILES_PATH, str(input_group_id))
-    reference_tree = Tree.get(path=os.path.join(dataset_dir, dataset['referenceTreeFileName']), schema='newick')
+    reference_tree = Tree.get(path=os.path.join(dataset_dir, dataset['referenceTreeFileName']), schema='newick',
+                              rooting='force-rooted' if dataset['isReferenceRooted'] else 'force-unrooted')
     reference_tree.tid = getTid(0)
     tn = reference_tree.taxon_namespace
-    tree_collection = TreeList.get(path=os.path.join(dataset_dir, config.TREE_COLLECTION_FILENAME), schema='newick', taxon_namespace=tn)
+    tree_collection = TreeList.get(path=os.path.join(dataset_dir, config.TREE_COLLECTION_FILENAME), schema='newick',
+                                   taxon_namespace=tn,
+                                   rooting='force-rooted' if dataset['isTCRooted'] else 'force-unrooted')
     for i, tree in enumerate(tree_collection):
         tree.tid = getTid(i + 1)
     tree_collection_names_path = os.path.join(dataset_dir, config.TREE_COLLECTION_NAMES_FILENAME)
@@ -83,18 +86,51 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
     ####### Re-root if needed
     self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 1})
 
+    # A special treatment for the root to resolve a tri-nary root branch
+    # The outgroup (first child) must be singled out
+    def resolve_polytomy_at_root(tree):
+        node = tree.seed_node
+        n = node.num_child_nodes()
+        while n > 2:
+            nn1 = Node()
+            nn1.edge.length = 0.0
+            c1 = node._child_nodes[n - 2]
+            c2 = node._child_nodes[n - 1]
+            node.remove_child(c1)
+            node.remove_child(c2)
+            nn1.add_child(c1)
+            nn1.add_child(c2)
+            node.add_child(nn1)
+            n -= 2
+
     def reroot_by_outgroup(tree, outgroup_taxa):
         node = tree.mrca(taxon_labels=outgroup_taxa)
-        if node:
-            # tree.to_outgroup_posiiton(node, update_bipartitions=True)
-            tree.reroot_at_node(node, update_bipartitions=True)
+        if node and node.parent_node:
+            tree.reroot_at_edge(node.edge)
+            # tree.reroot_at_node(node, update_bipartitions=True)
+
+            # This is not what I want: it is going to group the outgroup and a part of the ingroup together first
+            # because it joins pairs of children in the order given
+            # tree.resolve_polytomies(update_bipartitions=True)
+
+            resolve_polytomy_at_root(tree)
+
+            tree.update_bipartitions()
 
     if len(outgroup_taxa):
         if not dataset['isReferenceRooted']:
             reroot_by_outgroup(reference_tree, outgroup_taxa)
+        else:
+            reference_tree.resolve_polytomies(update_bipartitions=True)
         if not dataset['isTCRooted']:
             for tree in tree_collection:
                 reroot_by_outgroup(tree, outgroup_taxa)
+        else:
+            for tree in tree_collection:
+                tree.resolve_polytomies(update_bipartitions=True)
+    else:
+        assert(dataset['isReferenceRooted'], 'Cannot deal with unrooted trees without an outgroup')
+        assert(dataset['isTCRooted'], 'Cannot deal with unrooted trees without an outgroup')
 
 
     ######### Tree distances
