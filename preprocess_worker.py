@@ -106,18 +106,18 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
     for t in tree_collection:
         t.distances = {}
 
-    # for i, t1 in enumerate(tree_collection):
-    #     d = treecompare.symmetric_difference(reference_tree, t1)
-    #     reference_tree.distances[t1.tid] = d
-    #     t1.distances[reference_tree.tid] = d
-    #     for j in xrange(i + 1, len(tree_collection)):
-    #         t2 = tree_collection[j]
-    #         d = treecompare.symmetric_difference(t1, t2)
-    #         t1.distances[t2.tid] = d
-    #         t2.distances[t1.tid] = d
-    #     done_pairs += len(tree_collection) - i
-    #     self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 2,
-    #                                               'progress': {'done': done_pairs, 'total': total_pairs}})
+    for i, t1 in enumerate(tree_collection):
+        d = treecompare.symmetric_difference(reference_tree, t1)
+        reference_tree.distances[t1.tid] = d
+        t1.distances[reference_tree.tid] = d
+        for j in xrange(i + 1, len(tree_collection)):
+            t2 = tree_collection[j]
+            d = treecompare.symmetric_difference(t1, t2)
+            t1.distances[t2.tid] = d
+            t2.distances[t1.tid] = d
+        done_pairs += len(tree_collection) - i
+        self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 2,
+                                                  'progress': {'done': done_pairs, 'total': total_pairs}})
 
 
     ####### Find matches
@@ -154,7 +154,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
         for tree in tree_collection:
             if node.is_leaf():
                 matched_taxon_node = tree.find_node_for_taxon(node.taxon)
-                node.corresponding_nodes[tree.tid] = {'jac': 1, 'bid': matched_taxon_node.bid}
+                node.corresponding_nodes[tree.tid] = {'jac': 1, 'bid': matched_taxon_node.bid if matched_taxon_node else None}
             elif node.parent_node is None:
                 inter = len(reference_tree.entities.intersection(tree.entities))
                 node.corresponding_nodes[tree.tid] = {

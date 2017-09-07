@@ -18,17 +18,12 @@ app.config.from_object('config')
 app.config.from_envvar('ENVIRONMENT', silent=True)
 
 
-@app.route('/')
-def hello_world():
-    return 'Hello World!'
-
-
 # TODO provide rooting information
 @app.route('/datasets')
 def get_datasets():
     cursor = connection.input_group.find({})
-    data = [{'inputGroupId': d['inputGroupId'], 'title': d['title'], 'description': d.get('description', ''),
-             'numTrees': len(d['trees']) if 'trees' in d else d['numTrees']}
+    fields = ['inputGroupId', 'title', 'description', 'numTrees', 'numTaxa', 'referenceTreeFileName', 'timeCreated']
+    data = [{f:(d.get(f, 'N/A') if not f.startswith('time') else d['_id'].generation_time) for f in fields}
             for d in cursor]
     return jsonify(data)
 
@@ -248,6 +243,7 @@ def create_new_dataset():
     tree_collection_file.seek(0)
     tree_collection = TreeList.get(data=tree_collection_file.read(), schema='newick', taxon_namespace=tn)
     input_group_data['numTrees'] = len(tree_collection)
+    input_group_data['numTaxa'] = len(tn)
     connection.input_group.insert_one(input_group_data)
 
     # 4. Close the stored files
@@ -311,14 +307,11 @@ def check_upload_status(task_id):
             'state': task.state,
             'url': url_for('get_dataset', input_group_id=task.info['input_group_id'])
         }
-
     elif task.state != 'FAILURE':
         response = {
             'state': task.state,
         }
         response.update(task.info)
-        if 'result' in task.info:
-            response['result'] = task.info['result']
     else:
         # something went wrong in the background job
         response = {
