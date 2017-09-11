@@ -228,8 +228,12 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
             'name': name,
             'rfDistance': tree.distances,
             'rootBranch': 'b0',
-            'entities': ['e' + str(tn.accession_index(leaf.taxon)) for leaf in tree.leaf_node_iter()]
+            'entities': ['e' + str(tn.accession_index(leaf.taxon)) for leaf in tree.leaf_node_iter()],
         }
+        if len(outgroup_taxa):
+            node = tree.mrca(taxon_labels=outgroup_taxa)
+            assert(node.parent_node == tree.seed_node)
+            data['outgroupBranch'] = node.bid
         branches = []
         for node in tree.levelorder_node_iter():
             d = {
@@ -266,6 +270,10 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
     for tno, tree in enumerate(tree_collection):
         tree.ladderize()
         insert_tree(tree, tree_collection_names[tno])
+
+    connection.input_group.find_one_and_update({'inputGroupId': input_group_id},
+                                               {'$set': {'outgroupTaxa': ['e' + str(tn.accession_index(tn.get_taxon(t)))
+                                                                          for t in outgroup_taxa]}})
 
     return {'input_group_id': input_group_id}
 

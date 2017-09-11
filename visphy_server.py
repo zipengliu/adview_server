@@ -34,7 +34,7 @@ def get_dataset(input_group_id):
     data = connection.input_group.find_one({'inputGroupId': input_group_id}, projection={'trees': False, '_id': False})
     entity_cursor = connection.entity.find({'inputGroupId': input_group_id}, projection={'eid': True, 'name': True, '_id': False})
     tree_cursor = connection.tree.find({'inputGroupId': input_group_id},
-                                       projection={'name': True, 'tid': True, 'entities': True, 'rfDistance': True, 'rootBranch': True, '_id': False})
+                                       projection={'name': True, 'tid': True, 'entities': True, 'rfDistance': True, 'rootBranch': True, '_id': False, 'outgroupBranch': True})
     branch_cursor = connection.branch.find({'inputGroupId': input_group_id},
                                            projection={'inputGroupId': False, 'cb': False, 'cb2': False, 'parent': False, 'isLeaf': False, '_id': False})
     ref_branch_cursor = connection.branch.find({'inputGroupId': input_group_id, 'tid': data.get('defaultReferenceTree', 't0')},
@@ -64,6 +64,15 @@ def get_dataset(input_group_id):
     })
 
     return jsonify(data)
+
+
+@app.route('/dataset/<int:input_group_id>', methods=['DELETE'])
+def delete_dataset(input_group_id):
+    connection.entity.delete_many({'inputGroupId': input_group_id})
+    connection.tree.delete_many({'inputGroupId': input_group_id})
+    connection.branch.delete_many({'inputGroupId': input_group_id})
+    connection.input_group.delete_one({'inputGroupId': input_group_id})
+    return 'success'
 
 
 def read_tree_from_consensus_report(filepath):
@@ -218,8 +227,8 @@ def create_new_dataset():
         'isReferenceRooted': is_reference_rooted,
         'isTCRooted': is_tc_rooted,
         'supportRange': None if support_value_range == 'NA' else ([0, 1] if support_value_range == '1' else [0, 100]),
-        'withParalogs': False,
-        'hasMissingTaxa': False,        # Update this field after parsing
+        # 'withParalogs': False,
+        # 'hasMissingTaxa': False,        # Update this field after parsing
         'trees': [],
         'referenceTreeFileName': reference_tree_filename
     }
