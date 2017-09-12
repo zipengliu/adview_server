@@ -58,7 +58,7 @@ def get_corresponding_nodes(node, tree, missing_from_node=set(), missing_from_tr
 
 
 @app.task(bind=True)
-def preprocess_dataset(self, input_group_id, outgroup_string):
+def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False):
     outgroup_taxa = [x.strip() for x in str(outgroup_string).split(',')]
 
     # Heavy lifting starts here...
@@ -131,6 +131,10 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
     else:
         assert(dataset['isReferenceRooted'], 'Cannot deal with unrooted trees without an outgroup')
         assert(dataset['isTCRooted'], 'Cannot deal with unrooted trees without an outgroup')
+
+    reference_tree.ladderize()
+    for tree in tree_collection:
+        tree.ladderize()
 
 
     ######### Tree distances
@@ -213,6 +217,11 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
     ######## Build index
     self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 4})
 
+    # If we need to update the outgroup, remove that dataset first
+    connection.entity.remove({'inputGroupId': input_group_id})
+    connection.branch.remove({'inputGroupId': input_group_id})
+    connection.tree.remove({'inputGroupId': input_group_id})
+
     # all taxa
     connection.entity.insert_many([{
         'name': taxon.label,
@@ -232,7 +241,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
         }
         if len(outgroup_taxa):
             node = tree.mrca(taxon_labels=outgroup_taxa)
-            assert(node.parent_node == tree.seed_node)
+            # assert(node.parent_node == tree.seed_node)
             data['outgroupBranch'] = node.bid
         branches = []
         for node in tree.levelorder_node_iter():
@@ -264,11 +273,9 @@ def preprocess_dataset(self, input_group_id, outgroup_string):
         connection.tree.insert_one(data)
         connection.branch.insert_many(branches)
 
-    reference_tree.ladderize()
     insert_tree(reference_tree, dataset['referenceTreeFileName'])
 
     for tno, tree in enumerate(tree_collection):
-        tree.ladderize()
         insert_tree(tree, tree_collection_names[tno])
 
     connection.input_group.find_one_and_update({'inputGroupId': input_group_id},

@@ -298,7 +298,8 @@ def create_new_dataset():
 def upload_outgroup():
     print 'Received outgroup data'
     input_group_id = int(request.form['inputGroupId'])
-    task = preprocess_dataset.delay(input_group_id, request.form['outgroup'])
+    is_updating = request.form.get('isUpdating', False)
+    task = preprocess_dataset.delay(input_group_id, request.form['outgroup'], is_updating)
     print task
     return jsonify({'taskId': task.id}), 202, {'Location': url_for('check_upload_status', task_id=task.id)}
 
