@@ -195,7 +195,7 @@ def get_tree_newick():
     print 'Getting newick strings for ', tids, 'in dataset', input_group_id
 
     tree_str = get_newick_from_DB(input_group_id, tids)
-    return '\n'.join(tree_str)
+    return ''.join(tree_str)
 
 
 @app.route('/dataset', methods=['POST'])
