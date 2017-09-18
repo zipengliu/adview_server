@@ -11,6 +11,7 @@ class Connection():
         self.entity = self.mongo_db.entity
         self.tree = self.mongo_db.tree
         self.branch = self.mongo_db.branch
+        self.user = self.mongo_db.user
 
     def test_connection(self):
         n = self.input_group.find({}).count()

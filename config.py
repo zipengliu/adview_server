@@ -3,6 +3,8 @@ import os
 # developement or production
 ENVIRONMENT = 'development'
 
+SECRET_KEY = 'secret_key_replace_later'
+
 MONGODB_URL_DEV = 'mongodb://localhost:27017/visphy_dev'
 MONGODB_URL_PROD = 'mongodb://visphybe.cs.ubc.ca:27017/visphy_dev'
 
@@ -21,3 +23,5 @@ TREE_COLLECTION_NAMES_FILENAME = 'tree_collection_names.txt'
 # celery settings (same for dev and prod)
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+# LOGIN_DISABLED = True

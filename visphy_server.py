@@ -2,36 +2,158 @@ import config
 from flask import Flask, jsonify, request, url_for
 from flask_compress import Compress
 from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from dendropy import Tree, TreeList
-import sys, os, subprocess
+import os
+import subprocess
+from functools import wraps
 from datetime import datetime
+from passlib.context import CryptContext
+from bson.objectid import ObjectId
 import uuid
-from preprocess_worker import preprocess_dataset
-from database import Connection
 
+from database import Connection
+from forms import SignupForm, LoginForm, DatasetForm
+from preprocess_worker import preprocess_dataset
 
 
 # Initialize the server application
 app = Flask('Visphy Server')
 app.config.from_object('config')
 app.config.from_envvar('ENVIRONMENT', silent=True)
+pwd_crpt = CryptContext(["sha256_crypt", "ldap_salted_md5"])
+
+login_manager = LoginManager()
+login_manager.init_app(app)
 
 
-# TODO provide rooting information
+class User(UserMixin):
+
+    def __init__(self, _id, username, password):
+        self._id = _id
+        self.username = username
+        self.password = password
+
+    @staticmethod
+    def get_by_username(username):
+        user = connection.user.find_one({'username': username})
+        return User.get_from_document(user)
+
+    @staticmethod
+    def get_by_id(id):
+        user = connection.user.find_one({'_id': ObjectId(id)})
+        return User.get_from_document(user)
+
+    @staticmethod
+    def get_from_document(d):
+        if d is None:
+            return d
+        return User(str(d['_id']), d['username'], d['password'])
+
+    def save(self):
+        connection.user.insert_one({'username': self.username, 'password': self.password})
+
+    def get_id(self):
+        return unicode(self._id)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get_by_id(user_id)
+
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({'status': 'Unauthorized'}), 401
+
+
+@app.route('/signup', methods=['POST'])
+def register():
+    form = SignupForm(request.form)
+    if form.validate():
+        # Check existent username
+        if connection.user.find_one({'username': form.username.data}) is not None:
+            return 'User already exist.', 400
+
+        user = User('', form.username.data, pwd_crpt.hash(form.password.data))
+        user.save()
+        return "User successfully registered."
+    else:
+        return 'Invalid form', 400
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    form = LoginForm(request.form)
+    if form.validate():
+        user = User.get_by_username(form.username.data)
+        if user:
+            if pwd_crpt.verify(form.password.data, user.password):
+                # successfully logged in
+                login_user(user)
+                return 'User logged in'
+            else:
+                # password not correct
+                return 'Username or password is not correct', 400
+        else:
+            return 'Cannot find this user', 400
+    else:
+        return 'Invalid form', 400
+
+
+# Decorator for authorizing a dataset
+# Needs to be called after login_required()
+def authorize_dataset(func):
+    @wraps(func)
+    def authorize_and_call(*args, **kwargs):
+        input_group_id = request.args.get('inputGroupId', None) or request.form.get('inputGroupId', None)
+        if not input_group_id:
+            return 'No dataset id provided', 400
+
+        d = connection.input_group.find_one({'inputGroupId': int(input_group_id)},
+                                            projection={'ownerUserId': True, 'isPublic': True})
+        if d is None:
+            return 'There is no such dataset!', 400
+        if not d.get('isPublic', False) and str(d.get('ownerUserId', '')) != current_user._id:
+            return 'Unauthorized access!', 403
+        return func(*args, **kwargs)
+    return authorize_and_call
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return 'User logged out'
+
+
 @app.route('/datasets')
+@login_required
 def get_datasets():
-    cursor = connection.input_group.find({})
-    fields = ['inputGroupId', 'title', 'description', 'numTrees', 'numTaxa', 'referenceTreeFileName', 'timeCreated']
-    data = [{f:(d.get(f, 'N/A') if not f.startswith('time') else d['_id'].generation_time) for f in fields}
-            for d in cursor]
+    fields = ['inputGroupId', 'title', 'description', 'numTrees', 'numTaxa', 'referenceTreeFileName', 'timeCreated', 'isPublic']
+
+    def get_datasets_by_filter(f):
+        cursor = connection.input_group.find(f)
+        return [{f:(d.get(f, 'N/A') if not f.startswith('time') else d['_id'].generation_time) for f in fields}
+                for d in cursor]
+    data = get_datasets_by_filter({'ownerUserId': ObjectId(current_user._id)}) + get_datasets_by_filter({'isPublic': True})
     return jsonify(data)
 
 
-@app.route('/dataset/<int:input_group_id>')
-def get_dataset(input_group_id):
-    print 'Getting dataset', input_group_id
-    data = connection.input_group.find_one({'inputGroupId': input_group_id}, projection={'trees': False, '_id': False})
+@app.route('/dataset', methods=['GET'])
+@authorize_dataset
+@login_required
+def get_dataset():
+    input_group_id = request.args.get('inputGroupId', None)
+    if input_group_id is None:
+        return 'No dataset id is provided', 400
+    input_group_id = int(input_group_id)
+
+    data = connection.input_group.find_one({'inputGroupId': input_group_id}, projection={'trees': False, '_id': False, 'ownerUserId': False})
+    if data is None:
+        return 'No such dataset', 400
+
     entity_cursor = connection.entity.find({'inputGroupId': input_group_id}, projection={'eid': True, 'name': True, '_id': False})
     tree_cursor = connection.tree.find({'inputGroupId': input_group_id},
                                        projection={'name': True, 'tid': True, 'entities': True, 'rfDistance': True, 'rootBranch': True, '_id': False, 'outgroupBranch': True})
@@ -66,8 +188,15 @@ def get_dataset(input_group_id):
     return jsonify(data)
 
 
-@app.route('/dataset/<int:input_group_id>', methods=['DELETE'])
-def delete_dataset(input_group_id):
+@app.route('/dataset', methods=['DELETE'])
+@authorize_dataset
+@login_required
+def delete_dataset():
+    input_group_id = request.args.get('inputGroupId', None)
+    if input_group_id is None:
+        return 'No dataset id is provided', 400
+    input_group_id = int(input_group_id)
+
     connection.entity.delete_many({'inputGroupId': input_group_id})
     connection.tree.delete_many({'inputGroupId': input_group_id})
     connection.branch.delete_many({'inputGroupId': input_group_id})
@@ -102,7 +231,8 @@ def parse_tree(tree, entities):
     present_entities = {}
     for node in tree.levelorder_node_iter():
         if node.is_leaf():
-            label = node.taxon.label.replace(' ', '_')
+            # label = node.taxon.label.replace(' ', '_')
+            label = node.taxon.label
             branches[node.bid] = {
                 'entity': entities[label],
                 # 'support': node.support,
@@ -147,6 +277,8 @@ def get_newick_from_DB(input_group_id, tids):
 
 
 @app.route('/consensus', methods=['POST'])
+@authorize_dataset
+@login_required
 def get_consensus():
     input_group_id = int(request.form['inputGroupId'])
     tids = str(request.form['trees']).split(',')
@@ -189,6 +321,8 @@ def get_consensus():
 
 
 @app.route('/tree_newick', methods=['POST'])
+@authorize_dataset
+@login_required
 def get_tree_newick():
     input_group_id = int(request.form['inputGroupId'])
     tids = str(request.form['tids']).split(',')
@@ -199,10 +333,13 @@ def get_tree_newick():
 
 
 @app.route('/dataset', methods=['POST'])
+@login_required
 def create_new_dataset():
     print 'Creating new dataset...'
     print request.form
-    print request.files
+    # form = DatasetForm(request.POST)
+    # if not form.validate():
+    #     return 'Invalid form', 400
     try:
         title = request.form['title']
         description = request.form['description']
@@ -213,6 +350,7 @@ def create_new_dataset():
         reference_tree_filename = secure_filename(reference_tree_file.filename)
         tree_collection_file = request.files['treeCollection']
         tree_collection_name_file = request.files.get('treeCollectionNames', None)      # optional
+        is_public = request.form.get('isPublic', 'N') == 'Y'
     except Exception as e:
         print 'Dataset is not acceptable', e
         return 'Dataset is not acceptable', 400
@@ -230,7 +368,9 @@ def create_new_dataset():
         # 'withParalogs': False,
         # 'hasMissingTaxa': False,        # Update this field after parsing
         'trees': [],
-        'referenceTreeFileName': reference_tree_filename
+        'referenceTreeFileName': reference_tree_filename,
+        'isPublic': is_public,
+        'ownerUserId': ObjectId(current_user._id)
     }
 
     # 2. store files in filesystem
@@ -295,6 +435,8 @@ def create_new_dataset():
 # Hand the heavy lifting of preprocessing to the celery worker.
 # Return a task ID for client to check status
 @app.route('/outgroup', methods=['POST'])
+@authorize_dataset
+@login_required
 def upload_outgroup():
     print 'Received outgroup data'
     input_group_id = int(request.form['inputGroupId'])
@@ -334,6 +476,6 @@ def check_upload_status(task_id):
 connection = Connection(app.config['ENVIRONMENT'])
 connection.test_connection()
 Compress(app)
-CORS(app)
+CORS(app, supports_credentials=True)
 
 app.run(port=33333)

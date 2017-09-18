@@ -242,7 +242,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
         if len(outgroup_taxa):
             node = tree.mrca(taxon_labels=outgroup_taxa)
             # assert(node.parent_node == tree.seed_node)
-            data['outgroupBranch'] = node.bid
+            data['outgroupBranch'] = node.bid if node else None
         branches = []
         for node in tree.levelorder_node_iter():
             d = {
