@@ -1,4 +1,5 @@
 import config
+import secret_key
 from flask import Flask, jsonify, request, url_for
 from flask_compress import Compress
 from flask_cors import CORS
@@ -22,6 +23,7 @@ from preprocess_worker import preprocess_dataset
 app = Flask('Visphy Server')
 app.config.from_object('config')
 app.config.from_envvar('ENVIRONMENT', silent=True)
+app.config.from_object('secret_key')
 pwd_crpt = CryptContext(["sha256_crypt", "ldap_salted_md5"])
 
 login_manager = LoginManager()
@@ -107,16 +109,17 @@ def login():
 def authorize_dataset(func):
     @wraps(func)
     def authorize_and_call(*args, **kwargs):
-        input_group_id = request.args.get('inputGroupId', None) or request.form.get('inputGroupId', None)
-        if not input_group_id:
-            return 'No dataset id provided', 400
+        if not app.config['LOGIN_DISABLED']:
+            input_group_id = request.args.get('inputGroupId', None) or request.form.get('inputGroupId', None)
+            if not input_group_id:
+                return 'No dataset id provided', 400
 
-        d = connection.input_group.find_one({'inputGroupId': int(input_group_id)},
-                                            projection={'ownerUserId': True, 'isPublic': True})
-        if d is None:
-            return 'There is no such dataset!', 400
-        if not d.get('isPublic', False) and str(d.get('ownerUserId', '')) != current_user._id:
-            return 'Unauthorized access!', 403
+            d = connection.input_group.find_one({'inputGroupId': int(input_group_id)},
+                                                projection={'ownerUserId': True, 'isPublic': True})
+            if d is None:
+                return 'There is no such dataset!', 400
+            if not d.get('isPublic', False) and str(d.get('ownerUserId', '')) != current_user._id:
+                return 'Unauthorized access!', 403
         return func(*args, **kwargs)
     return authorize_and_call
 
@@ -370,7 +373,7 @@ def create_new_dataset():
         'trees': [],
         'referenceTreeFileName': reference_tree_filename,
         'isPublic': is_public,
-        'ownerUserId': ObjectId(current_user._id)
+        'ownerUserId': ObjectId(current_user._id) if not app.config['LOGIN_DISABLED'] else None
     }
 
     # 2. store files in filesystem
@@ -457,7 +460,7 @@ def check_upload_status(task_id):
     elif task.state == 'SUCCESS':
         response = {
             'state': task.state,
-            'url': url_for('get_dataset', input_group_id=task.info['input_group_id'])
+            'url': '/dataset/' + str(task.info['input_group_id'])      # The view url for dataset
         }
     elif task.state != 'FAILURE':
         response = {

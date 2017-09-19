@@ -3,8 +3,6 @@ import os
 # developement or production
 ENVIRONMENT = 'development'
 
-SECRET_KEY = 'secret_key_replace_later'
-
 MONGODB_URL_DEV = 'mongodb://localhost:27017/visphy_dev'
 MONGODB_URL_PROD = 'mongodb://visphybe.cs.ubc.ca:27017/visphy_dev'
 

@@ -14,8 +14,7 @@ PREPROCESS_STEPS = [
     'Building indices for branches and taxa and storing to database',
 ]
 
-connection = Connection(config.ENVIRONMENT)
-connection.test_connection()
+connection = Connection(config.ENVIRONMENT, connect=False)
 app = Celery('preprocess', broker=config.CELERY_BROKER_URL, backend=config.CELERY_RESULT_BACKEND)
 
 
@@ -104,18 +103,30 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
             n -= 2
 
     def reroot_by_outgroup(tree, outgroup_taxa):
-        node = tree.mrca(taxon_labels=outgroup_taxa)
-        if node and node.parent_node:
-            tree.reroot_at_edge(node.edge)
+        present_outgroup_taxa = filter(lambda t: tree.find_node_with_taxon_label(t) is not None, outgroup_taxa)
+        if len(present_outgroup_taxa):
+            node = tree.mrca(taxon_labels=present_outgroup_taxa)
+            if node and node.parent_node:
+                tree.reroot_at_edge(node.edge)
             # tree.reroot_at_node(node, update_bipartitions=True)
 
             # This is not what I want: it is going to group the outgroup and a part of the ingroup together first
             # because it joins pairs of children in the order given
             # tree.resolve_polytomies(update_bipartitions=True)
 
+            tree.is_rooted = True
             resolve_polytomy_at_root(tree)
-
             tree.update_bipartitions()
+        else:
+            # All outgroup taxa is missing
+            # This should rarely happen!
+            print 'Tree with no outgroup taxa'
+
+            assert tree.seed_node is not None
+            tree.is_rooted = True
+            tree.resolve_polytomies(update_bipartitions=True)
+
+        assert tree.seed_node.num_child_nodes() < 3
 
     if len(outgroup_taxa):
         if not dataset['isReferenceRooted']:
@@ -129,8 +140,8 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
             for tree in tree_collection:
                 tree.resolve_polytomies(update_bipartitions=True)
     else:
-        assert(dataset['isReferenceRooted'], 'Cannot deal with unrooted trees without an outgroup')
-        assert(dataset['isTCRooted'], 'Cannot deal with unrooted trees without an outgroup')
+        assert dataset['isReferenceRooted'], 'Cannot deal with unrooted trees without an outgroup'
+        assert dataset['isTCRooted'], 'Cannot deal with unrooted trees without an outgroup'
 
     reference_tree.ladderize()
     for tree in tree_collection:
@@ -240,7 +251,8 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
             'entities': ['e' + str(tn.accession_index(leaf.taxon)) for leaf in tree.leaf_node_iter()],
         }
         if len(outgroup_taxa):
-            node = tree.mrca(taxon_labels=outgroup_taxa)
+            present_outgroup_taxa = filter(lambda t: tree.find_node_with_taxon_label(t) is not None, outgroup_taxa)
+            node = tree.mrca(taxon_labels=present_outgroup_taxa) if len(present_outgroup_taxa) else None
             # assert(node.parent_node == tree.seed_node)
             data['outgroupBranch'] = node.bid if node else None
         branches = []
@@ -262,6 +274,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
                     'support': support_val,
                 })
                 # Multifurcation is likely to happen at the root node because of the re-rooting
+                assert len(cn) < 3, 'Multifurcation at {} in tree {} (root= {})'.format(node.bid, tree.tid, tree.seed_node.bid)
                 if len(cn) == 3:
                     d['rightmost'] = cn[2].bid
             if tree == reference_tree:
