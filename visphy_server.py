@@ -22,7 +22,6 @@ from preprocess_worker import preprocess_dataset
 # Initialize the server application
 app = Flask('Visphy Server')
 app.config.from_object('config')
-app.config.from_envvar('ENVIRONMENT', silent=True)
 app.config.from_object('secret_key')
 pwd_crpt = CryptContext(["sha256_crypt", "ldap_salted_md5"])
 

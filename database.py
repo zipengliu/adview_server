@@ -5,6 +5,7 @@ from pymongo import MongoClient
 class Connection():
     def __init__(self, env, connect=True):
         self.url = config.MONGODB_URL_PROD if env == 'production' else config.MONGODB_URL_DEV
+        print 'Connecting to MongoDB: ', self.url
         self.mongo_client = MongoClient(self.url, connect=connect)
         self.mongo_db = self.mongo_client.visphy_dev
         self.input_group = self.mongo_db.inputGroup
