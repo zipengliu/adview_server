@@ -139,7 +139,8 @@ def get_datasets():
         cursor = connection.input_group.find(f)
         return [{f:(d.get(f, 'N/A') if not f.startswith('time') else d['_id'].generation_time) for f in fields}
                 for d in cursor]
-    data = get_datasets_by_filter({'ownerUserId': ObjectId(current_user._id)}) + get_datasets_by_filter({'isPublic': True})
+    data = get_datasets_by_filter({'ownerUserId': ObjectId(current_user._id), 'isPublic': False}) + \
+           get_datasets_by_filter({'isPublic': True})
     return jsonify(data)
 
 
