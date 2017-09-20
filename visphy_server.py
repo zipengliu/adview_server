@@ -108,7 +108,7 @@ def login():
 def authorize_dataset(func):
     @wraps(func)
     def authorize_and_call(*args, **kwargs):
-        if not app.config['LOGIN_DISABLED']:
+        if not app.config.get('LOGIN_DISABLED'):
             input_group_id = request.args.get('inputGroupId', None) or request.form.get('inputGroupId', None)
             if not input_group_id:
                 return 'No dataset id provided', 400
@@ -372,7 +372,7 @@ def create_new_dataset():
         'trees': [],
         'referenceTreeFileName': reference_tree_filename,
         'isPublic': is_public,
-        'ownerUserId': ObjectId(current_user._id) if not app.config['LOGIN_DISABLED'] else None
+        'ownerUserId': ObjectId(current_user._id) if not app.config.get('LOGIN_DISABLED') else None
     }
 
     # 2. store files in filesystem
