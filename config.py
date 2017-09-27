@@ -4,7 +4,7 @@ import os
 ENVIRONMENT = 'development'
 
 MONGODB_URL_DEV = 'mongodb://localhost:27017/visphy_dev'
-MONGODB_URL_PROD = 'mongodb://visphybe.cs.ubc.ca:27017/visphy_dev'
+MONGODB_URL_PROD = 'mongodb://127.0.0.1:27017/visphy_prod'
 
 # compress the json returned to the client.
 COMPRESS_LEVEL = 6
