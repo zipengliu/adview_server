@@ -7,7 +7,7 @@ class Connection():
         self.url = config.MONGODB_URL_PROD if env == 'production' else config.MONGODB_URL_DEV
         print 'Connecting to MongoDB: ', self.url
         self.mongo_client = MongoClient(self.url, connect=connect)
-        self.mongo_db = self.mongo_client.visphy_dev
+        self.mongo_db = self.mongo_client.visphy_prod if env == 'production' else self.mongo_client.visphy_dev
         self.input_group = self.mongo_db.inputGroup
         self.entity = self.mongo_db.entity
         self.tree = self.mongo_db.tree
