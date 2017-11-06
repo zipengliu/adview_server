@@ -93,6 +93,7 @@ def login():
             if pwd_crpt.verify(form.password.data, user.password):
                 # successfully logged in
                 login_user(user)
+                print 'User logged in: ', user.username
                 return 'User logged in'
             else:
                 # password not correct
@@ -110,6 +111,7 @@ def authorize_dataset(func):
     def authorize_and_call(*args, **kwargs):
         if not app.config.get('LOGIN_DISABLED'):
             input_group_id = request.args.get('inputGroupId', None) or request.form.get('inputGroupId', None)
+            print 'User ', current_user.username, ' is requesting dataset ', input_group_id
             if not input_group_id:
                 return 'No dataset id provided', 400
 
