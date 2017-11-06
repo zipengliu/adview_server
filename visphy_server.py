@@ -1,5 +1,6 @@
 import config
 import secret_key
+import logging
 from flask import Flask, jsonify, request, url_for
 from flask_compress import Compress
 from flask_cors import CORS
@@ -24,6 +25,7 @@ app = Flask('Visphy Server')
 app.config.from_object('config')
 app.config.from_object('secret_key')
 pwd_crpt = CryptContext(["sha256_crypt", "ldap_salted_md5"])
+logging.basicConfig(level=logging.INFO)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -93,7 +95,7 @@ def login():
             if pwd_crpt.verify(form.password.data, user.password):
                 # successfully logged in
                 login_user(user)
-                print 'User logged in: ', user.username
+                logging.info('User logged in %s ', user.username)
                 return 'User logged in'
             else:
                 # password not correct
@@ -111,7 +113,7 @@ def authorize_dataset(func):
     def authorize_and_call(*args, **kwargs):
         if not app.config.get('LOGIN_DISABLED'):
             input_group_id = request.args.get('inputGroupId', None) or request.form.get('inputGroupId', None)
-            print 'User ', current_user.username, ' is requesting dataset ', input_group_id
+            logging.info('User %s is requesting dataset %s', current_user.username, input_group_id)
             if not input_group_id:
                 return 'No dataset id provided', 400
 
@@ -480,6 +482,7 @@ def check_upload_status(task_id):
 
 connection = Connection(app.config['ENVIRONMENT'])
 connection.test_connection()
+logging.info('Database connected: %s', connection.url)
 Compress(app)
 CORS(app, supports_credentials=True)
 
