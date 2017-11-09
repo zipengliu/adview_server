@@ -148,6 +148,14 @@ def get_datasets():
     return jsonify(data)
 
 
+def retrieve_gridfs_document(data):
+    if data.has_key('gfsFileId'):
+        d = connection.read_grid_file(data['gfsFileId'])
+        # Populate d into data
+        data.update(d)
+        del data['gfsFileId']
+    return data
+
 @app.route('/dataset', methods=['GET'])
 @authorize_dataset
 @login_required
@@ -163,7 +171,8 @@ def get_dataset():
 
     entity_cursor = connection.entity.find({'inputGroupId': input_group_id}, projection={'eid': True, 'name': True, '_id': False})
     tree_cursor = connection.tree.find({'inputGroupId': input_group_id},
-                                       projection={'name': True, 'tid': True, 'entities': True, 'rfDistance': True, 'rootBranch': True, '_id': False, 'outgroupBranch': True})
+                                       projection={'name': True, 'tid': True, 'entities': True, 'rfDistance': True, 'gfsFileId': True,
+                                                   'rootBranch': True, '_id': False, 'outgroupBranch': True})
     branch_cursor = connection.branch.find({'inputGroupId': input_group_id},
                                            projection={'inputGroupId': False, 'cb': False, 'cb2': False, 'parent': False, 'isLeaf': False, '_id': False})
     ref_branch_cursor = connection.branch.find({'inputGroupId': input_group_id, 'tid': data.get('defaultReferenceTree', 't0')},
@@ -171,20 +180,22 @@ def get_dataset():
 
     trees = {}
     for d in tree_cursor:
-        trees[d['tid']] = d
+        trees[d['tid']] = retrieve_gridfs_document(d)
         trees[d['tid']]['branches'] = {}
     for d in branch_cursor:
-        trees[d['tid']]['branches'][d['bid']] = d
-        del d['bid']
-        del d['tid']
+        dd = retrieve_gridfs_document(d)
+        trees[d['tid']]['branches'][d['bid']] = dd
+        del dd['bid']
+        del dd['tid']
     entities = {}
     for d in entity_cursor:
         entities[d['eid']] = d
 
     ref_tree = trees.pop(data.get('defaultReferenceTree', 't0'))
     for d in ref_branch_cursor:
-        ref_tree['branches'][d['bid']] = d
-        del d['bid']
+        dd = retrieve_gridfs_document(d)
+        ref_tree['branches'][d['bid']] = dd
+        del dd['bid']
 
     data.update({
         'trees': trees,

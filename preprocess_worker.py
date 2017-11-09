@@ -107,8 +107,9 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
         if len(present_outgroup_taxa):
             node = tree.mrca(taxon_labels=present_outgroup_taxa)
             if node and node.parent_node:
-                tree.reroot_at_edge(node.edge)
-            # tree.reroot_at_node(node, update_bipartitions=True)
+                # tree.reroot_at_edge(node.edge)
+                tree.to_outgroup_position(node, update_bipartitions=False)
+                # tree.reroot_at_node(node, update_bipartitions=True)
 
             # This is not what I want: it is going to group the outgroup and a part of the ingroup together first
             # because it joins pairs of children in the order given
@@ -116,6 +117,10 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
 
             tree.is_rooted = True
             resolve_polytomy_at_root(tree)
+
+            # Turns out I have to call this function because it needs to resolve polytomies deep inside the tree,
+            #   not just the root!
+            tree.resolve_polytomies()
             tree.update_bipartitions()
         else:
             # All outgroup taxa is missing
@@ -132,13 +137,17 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
         if not dataset['isReferenceRooted']:
             reroot_by_outgroup(reference_tree, outgroup_taxa)
         else:
+            # reference_tree.ladderize()
             reference_tree.resolve_polytomies(update_bipartitions=True)
+
         if not dataset['isTCRooted']:
             for tree in tree_collection:
                 reroot_by_outgroup(tree, outgroup_taxa)
         else:
             for tree in tree_collection:
                 tree.resolve_polytomies(update_bipartitions=True)
+            # for tree in tree_collection:
+            #     tree.ladderize()
     else:
         assert dataset['isReferenceRooted'], 'Cannot deal with unrooted trees without an outgroup'
         assert dataset['isTCRooted'], 'Cannot deal with unrooted trees without an outgroup'
@@ -157,18 +166,21 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
     for t in tree_collection:
         t.distances = {}
 
-    for i, t1 in enumerate(tree_collection):
-        d = treecompare.symmetric_difference(reference_tree, t1)
-        reference_tree.distances[t1.tid] = d
-        t1.distances[reference_tree.tid] = d
-        for j in xrange(i + 1, len(tree_collection)):
-            t2 = tree_collection[j]
-            d = treecompare.symmetric_difference(t1, t2)
-            t1.distances[t2.tid] = d
-            t2.distances[t1.tid] = d
-        done_pairs += len(tree_collection) - i
-        self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 2,
-                                                  'progress': {'done': done_pairs, 'total': total_pairs}})
+    if len(tree_collection) > config.TREE_DISTANCE_THRESHOLD:
+        print '#trees exceed limit.  Do not calcualte RF distances'
+    else:
+        for i, t1 in enumerate(tree_collection):
+            d = treecompare.symmetric_difference(reference_tree, t1)
+            reference_tree.distances[t1.tid] = d
+            t1.distances[reference_tree.tid] = d
+            for j in xrange(i + 1, len(tree_collection)):
+                t2 = tree_collection[j]
+                d = treecompare.symmetric_difference(t1, t2)
+                t1.distances[t2.tid] = d
+                t2.distances[t1.tid] = d
+            done_pairs += len(tree_collection) - i
+            self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 2,
+                                                      'progress': {'done': done_pairs, 'total': total_pairs}})
 
 
     ####### Find matches
@@ -274,17 +286,18 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
                     'support': support_val,
                 })
                 # Multifurcation is likely to happen at the root node because of the re-rooting
-                assert len(cn) < 3, 'Multifurcation at {} in tree {} (root= {})'.format(node.bid, tree.tid, tree.seed_node.bid)
                 if len(cn) == 3:
-                    d['rightmost'] = cn[2].bid
+                    tree.print_plot()
+                    print node
+                assert len(cn) < 3, 'Multifurcation at {} in tree {} (root= {})'.format(node.bid, tree.tid, tree.seed_node.bid)
+                # if len(cn) == 3:
+                #     d['rightmost'] = cn[2].bid
             if tree == reference_tree:
                 d['cb'] = node.corresponding_nodes
             branches.append(d)
-        data['branches'] = branches
 
-        # The data for a tree might be large so we do not use bulk insert
-        connection.tree.insert_one(data)
-        connection.branch.insert_many(branches)
+        connection.insert_tree(data)
+        connection.insert_branches(branches)
 
     insert_tree(reference_tree, dataset['referenceTreeFileName'])
 

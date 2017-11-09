@@ -13,6 +13,9 @@ COMPRESS_LEVEL = 6
 TEMP_CONSENSUS_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp_consensus')
 CONSENSUS_PARALLIZATION = '4'
 
+# Calculating RF tree distance is slow, and we do not do that if #trees exceed this threshold
+TREE_DISTANCE_THRESHOLD = 400
+
 # for uploaded datasets
 DATA_FILES_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'raw_data_files')
 TREE_COLLECTION_FILENAME = 'tree_collection.tre'
