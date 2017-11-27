@@ -87,20 +87,53 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
 
     # A special treatment for the root to resolve a tri-nary root branch
     # The outgroup (first child) must be singled out
-    def resolve_polytomy_at_root(tree):
-        node = tree.seed_node
-        n = node.num_child_nodes()
-        while n > 2:
-            nn1 = Node()
-            nn1.edge.length = 0.0
-            c1 = node._child_nodes[n - 2]
-            c2 = node._child_nodes[n - 1]
-            node.remove_child(c1)
-            node.remove_child(c2)
-            nn1.add_child(c1)
-            nn1.add_child(c2)
-            node.add_child(nn1)
-            n -= 2
+    def resolve_polytomy_at_root(tree, outgroup_taxa):
+        root = tree.seed_node
+        if root.num_child_nodes() == 2:
+            return
+        assert root.num_child_nodes() == 3
+        sorted_children = sorted(root.child_nodes(), key=lambda t: len(t.leaf_nodes()))
+
+        middle_node = sorted_children[1]
+        found = False
+        for x in middle_node.leaf_iter():
+            if x in outgroup_taxa:
+                found = True
+                break
+        c1 = None
+        c2 = None
+        if found:
+            # merge the first two
+            c1 = root._child_nodes[0]
+            c2 = root._child_nodes[1]
+        else:
+            # merge the 2nd and 3rd
+            c1 = root._child_nodes[1]
+            c2 = root._child_nodes[2]
+        root.remove_child(c1)
+        root.remove_child(c2)
+        nn1 = Node()
+        nn1.edge.length = 0.0
+        nn1.add_child(c1)
+        nn1.add_child(c2)
+        root.add_child(nn1)
+
+        # n = node.num_child_nodes()
+        # i = 0
+        # while n > 2:
+        #     nn1 = Node()
+        #     nn1.edge.length = 0.0
+        #     c1 = sorted_children[i]
+        #     c2 = sorted_children[i + 1]
+        #     # c1 = node._child_nodes[n - 2]
+        #     # c2 = node._child_nodes[n - 1]
+        #     node.remove_child(c1)
+        #     node.remove_child(c2)
+        #     nn1.add_child(c1)
+        #     nn1.add_child(c2)
+        #     node.add_child(nn1)
+        #     n -= 2
+        #     i += 2
 
     def reroot_by_outgroup(tree, outgroup_taxa):
         present_outgroup_taxa = filter(lambda t: tree.find_node_with_taxon_label(t) is not None, outgroup_taxa)
@@ -116,7 +149,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
             # tree.resolve_polytomies(update_bipartitions=True)
 
             tree.is_rooted = True
-            resolve_polytomy_at_root(tree)
+            resolve_polytomy_at_root(tree, present_outgroup_taxa)
 
             # Turns out I have to call this function because it needs to resolve polytomies deep inside the tree,
             #   not just the root!
@@ -264,9 +297,13 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
         }
         if len(outgroup_taxa):
             present_outgroup_taxa = filter(lambda t: tree.find_node_with_taxon_label(t) is not None, outgroup_taxa)
-            node = tree.mrca(taxon_labels=present_outgroup_taxa) if len(present_outgroup_taxa) else None
+            # node = tree.mrca(taxon_labels=present_outgroup_taxa) if len(present_outgroup_taxa) else None
             # assert(node.parent_node == tree.seed_node)
-            data['outgroupBranch'] = node.bid if node else None
+
+            # avoid non-monophyletic outgroup
+            # assume the the first child is the outgroup, all others in ingroup
+            node = tree.seed_node.child_nodes()[0]
+            data['outgroupBranch'] = node.bid if len(node.leaf_nodes()) == len(present_outgroup_taxa) else None
         branches = []
         for node in tree.levelorder_node_iter():
             d = {

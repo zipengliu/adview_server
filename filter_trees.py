@@ -26,6 +26,10 @@ for i, tree in enumerate(tl):
                     ' in outgroup, but it supposed to be ', len(present_outgroup_taxa)
                 cnt += 1
                 bad_trees[i] = True
+        else:
+            print 'mrca not found'
+    else:
+        print 'nothing is found'
 
 
 print cnt, 'out of', len(tl)
