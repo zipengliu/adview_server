@@ -322,13 +322,25 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
             if node.is_leaf():
                 d['entity'] = 'e' + str(tn.accession_index(node.taxon))
             else:
-                support_val = 0 if not node.label else float(node.label)
+                if not node.label:
+                    support_val = 0
+                    label = ''
+                else:
+                    try:
+                        support_val = float(node.label)
+                        label = ''
+                    except ValueError:
+                        support_val = 0
+                        label = node.label
                 cn = node.child_nodes()
                 d.update({
                     'left': cn[0].bid,
                     'right': cn[1].bid,
                     'support': support_val,
                 })
+                if len(label):
+                    d['label'] = label
+
                 # Multifurcation is likely to happen at the root node because of the re-rooting
                 if len(cn) == 3:
                     tree.print_plot()
