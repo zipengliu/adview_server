@@ -58,7 +58,8 @@ def get_corresponding_nodes(node, tree, missing_from_node=set(), missing_from_tr
 
 @app.task(bind=True)
 def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False):
-    outgroup_taxa = [x.strip() for x in str(outgroup_string).split(',')]
+    outgroup_taxa = filter(lambda x: len(x) > 0, [x.strip() for x in str(outgroup_string).split(',')])
+    print 'Outgroup taxa:', outgroup_taxa
 
     # Heavy lifting starts here...
     ###### Read information of this dataset from DB and FS
@@ -169,21 +170,19 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
     if len(outgroup_taxa):
         if not dataset['isReferenceRooted']:
             reroot_by_outgroup(reference_tree, outgroup_taxa)
-        else:
-            # reference_tree.ladderize()
-            reference_tree.resolve_polytomies(update_bipartitions=True)
-
         if not dataset['isTCRooted']:
             for tree in tree_collection:
                 reroot_by_outgroup(tree, outgroup_taxa)
-        else:
-            for tree in tree_collection:
-                tree.resolve_polytomies(update_bipartitions=True)
-            # for tree in tree_collection:
-            #     tree.ladderize()
     else:
         assert dataset['isReferenceRooted'], 'Cannot deal with unrooted trees without an outgroup'
         assert dataset['isTCRooted'], 'Cannot deal with unrooted trees without an outgroup'
+
+    if dataset['isReferenceRooted']:
+        reference_tree.resolve_polytomies(update_bipartitions=True)
+
+    if dataset['isTCRooted']:
+        for tree in tree_collection:
+            tree.resolve_polytomies(update_bipartitions=True)
 
     reference_tree.ladderize()
     for tree in tree_collection:
@@ -285,6 +284,18 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
         'inputGroupId': input_group_id}
         for i, taxon in enumerate(tn)])
 
+    def find_outgroup_branch_bid(tree, outgroup_taxa):
+        # avoid non-monophyletic outgroup
+        # assume the the first child is the outgroup (all taxa under ourgroup branch must be outgroup taxa)
+        present_outgroup_taxa = filter(lambda t: tree.find_node_with_taxon_label(t) is not None, outgroup_taxa)
+        node = tree.seed_node.child_nodes()[0]
+        if len(node.leaf_nodes()) > len(present_outgroup_taxa):
+            return None
+        for x in node.leaf_iter():
+            if x not in present_outgroup_taxa:
+                return None
+        return node.bid
+
     def insert_tree(tree, name):
         data = {
             'tid': tree.tid,
@@ -296,14 +307,10 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
             'entities': ['e' + str(tn.accession_index(leaf.taxon)) for leaf in tree.leaf_node_iter()],
         }
         if len(outgroup_taxa):
-            present_outgroup_taxa = filter(lambda t: tree.find_node_with_taxon_label(t) is not None, outgroup_taxa)
             # node = tree.mrca(taxon_labels=present_outgroup_taxa) if len(present_outgroup_taxa) else None
             # assert(node.parent_node == tree.seed_node)
+            data['outgroupBranch'] = find_outgroup_branch_bid(tree, outgroup_taxa)
 
-            # avoid non-monophyletic outgroup
-            # assume the the first child is the outgroup, all others in ingroup
-            node = tree.seed_node.child_nodes()[0]
-            data['outgroupBranch'] = node.bid if len(node.leaf_nodes()) == len(present_outgroup_taxa) else None
         branches = []
         for node in tree.levelorder_node_iter():
             d = {
