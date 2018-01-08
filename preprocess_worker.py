@@ -219,6 +219,8 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
     total = sum([1 for _ in reference_tree], 0)
     self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 3,
                                               'progress': {'done': 0, 'total': total}})
+    print 'Start finding corresponding branches'
+
     # Init
     done = 0
     all_entities = set(tn)
@@ -270,6 +272,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
 
 
     ######## Build index
+    print 'Start stroing restuls to DB'
     self.update_state(state='PROGRESS', meta={'steps': PREPROCESS_STEPS, 'current': 4})
 
     # If we need to update the outgroup, remove that dataset first
@@ -363,6 +366,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
     connection.input_group.find_one_and_update({'inputGroupId': input_group_id},
                                                {'$set': {'outgroupTaxa': ['e' + str(tn.accession_index(tn.get_taxon(t)))
                                                                           for t in outgroup_taxa]}})
+    print 'DONE'
 
     return {'input_group_id': input_group_id}
 
