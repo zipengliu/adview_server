@@ -92,6 +92,9 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
         root = tree.seed_node
         if root.num_child_nodes() == 2:
             return
+        if root.num_child_nodes() > 3:
+            tree.resolve_polytomies()
+            tree.print_plot()
         assert root.num_child_nodes() == 3
         sorted_children = sorted(root.child_nodes(), key=lambda t: len(t.leaf_nodes()))
 
@@ -139,6 +142,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
     def reroot_by_outgroup(tree, outgroup_taxa):
         present_outgroup_taxa = filter(lambda t: tree.find_node_with_taxon_label(t) is not None, outgroup_taxa)
         if len(present_outgroup_taxa):
+            tree.resolve_polytomies()
             node = tree.mrca(taxon_labels=present_outgroup_taxa)
             if node and node.parent_node:
                 # tree.reroot_at_edge(node.edge)
@@ -160,6 +164,8 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
             # All outgroup taxa is missing
             # This should rarely happen!
             print 'Tree with no outgroup taxa'
+
+            tree.reroot_at_midpoint()
 
             assert tree.seed_node is not None
             tree.is_rooted = True
