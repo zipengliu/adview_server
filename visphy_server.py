@@ -169,7 +169,7 @@ def get_dataset():
     if data is None:
         return 'No such dataset', 400
 
-    entity_cursor = connection.entity.find({'inputGroupId': input_group_id}, projection={'eid': True, 'name': True, '_id': False})
+    entity_cursor = connection.entity.find({'inputGroupId': input_group_id}, projection={'eid': True, 'name': True, 'label': True, '_id': False})
     tree_cursor = connection.tree.find({'inputGroupId': input_group_id},
                                        projection={'name': True, 'tid': True, 'entities': True, 'rfDistance': True, 'gfsFileId': True,
                                                    'rootBranch': True, '_id': False, 'outgroupBranch': True})
