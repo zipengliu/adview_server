@@ -190,6 +190,8 @@ def get_dataset():
     entities = {}
     for d in entity_cursor:
         entities[d['eid']] = d
+        if 'label' in d and len(d['label']) > 0:
+            d['name'] = d['label']
 
     ref_tree = trees.pop(data.get('defaultReferenceTree', 't0'))
     for d in ref_branch_cursor:
@@ -443,7 +445,8 @@ def create_new_dataset():
         'referenceTree': {
             'name': reference_tree_filename,
             'tid': 't0',
-            'branches': branches
+            'branches': branches,
+            'rootBranch': 'b0'
         },
         'entities': {'e' + str(tn.accession_index(t)): t.label for t in tn}
     }
