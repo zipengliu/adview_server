@@ -169,7 +169,7 @@ def get_dataset():
     if data is None:
         return 'No such dataset', 400
 
-    entity_cursor = connection.entity.find({'inputGroupId': input_group_id}, projection={'eid': True, 'name': True, 'label': True, '_id': False})
+    entity_cursor = connection.entity.find({'inputGroupId': input_group_id}, projection={'eid': True, 'name': True, 'label': True, 'attributes': True, '_id': False})
     tree_cursor = connection.tree.find({'inputGroupId': input_group_id},
                                        projection={'name': True, 'tid': True, 'entities': True, 'rfDistance': True, 'gfsFileId': True,
                                                    'rootBranch': True, '_id': False, 'outgroupBranch': True})
@@ -368,6 +368,7 @@ def create_new_dataset():
         reference_tree_filename = secure_filename(reference_tree_file.filename)
         tree_collection_file = request.files['treeCollection']
         tree_collection_name_file = request.files.get('treeCollectionNames', None)      # optional
+        taxa_attribute_file = request.files.get('taxaAttributes', None)      # optional
         is_public = request.form.get('isPublic', 'N') == 'Y'
     except Exception as e:
         print 'Dataset is not acceptable', e
@@ -400,6 +401,9 @@ def create_new_dataset():
     if tree_collection_name_file:
         tree_collection_name_file.save(os.path.join(dirname, app.config['TREE_COLLECTION_NAMES_FILENAME']))
         tree_collection_name_file.close()
+    if taxa_attribute_file:
+        taxa_attribute_file.save(os.path.join(dirname, app.config['TAXA_ATTRIBUTES_FILENAME']))
+        taxa_attribute_file.close()
 
     # 3. Parse trees
     reference_tree_file.seek(0)

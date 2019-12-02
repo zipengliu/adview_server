@@ -20,6 +20,7 @@ TREE_DISTANCE_THRESHOLD = 400
 DATA_FILES_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'raw_data_files')
 TREE_COLLECTION_FILENAME = 'tree_collection.tre'
 TREE_COLLECTION_NAMES_FILENAME = 'tree_collection_names.txt'
+TAXA_ATTRIBUTES_FILENAME = 'taxa_attributes.csv'
 
 # celery settings (same for dev and prod)
 CELERY_BROKER_URL = 'redis://localhost:6379/0'

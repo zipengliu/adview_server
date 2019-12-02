@@ -1,5 +1,6 @@
 import config
 import os
+from csv import DictReader
 from celery import Celery
 from dendropy import Tree, TreeList, Node
 from dendropy.calculate import treecompare
@@ -81,6 +82,19 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
     tree_collection_names = [l.strip() for l in open(tree_collection_names_path)] \
         if os.path.exists(tree_collection_names_path) else \
         ['tree_' + str(i) for i in xrange(1, len(tree_collection) + 1)]
+
+    # Parse the taxa attributes CSV file
+    taxa_attributes_path = os.path.join(dataset_dir, config.TAXA_ATTRIBUTES_FILENAME)
+    taxa_attributes = {}            # A mapping from taxon label to a list of attribute names
+    if os.path.exists(taxa_attributes_path):
+        with open(taxa_attributes_path, 'rb') as csvfile:
+            reader = DictReader(csvfile)
+            for row in reader:
+                if tn.has_taxon_label(row['taxon']):
+                    taxa_attributes[row['taxon']] = [k for k in row if row[k] == '1' and k != 'taxon']
+                else:
+                    print 'Warning: taxon ', row['taxon'], ' in taxa_attributes.csv is not found in the tree files'
+    print 'taxa_attributes: ', taxa_attributes
 
 
     ####### Re-root if needed
@@ -290,6 +304,7 @@ def preprocess_dataset(self, input_group_id, outgroup_string, is_updating=False)
     connection.entity.insert_many([{
         'name': taxon.label,
         'eid': 'e' + str(i),
+        'attributes': taxa_attributes[taxon.label] if taxon.label in taxa_attributes else [],
         'inputGroupId': input_group_id}
         for i, taxon in enumerate(tn)])
 
